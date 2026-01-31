@@ -3,6 +3,7 @@ import argparse
 import sys
 import os
 import signal
+import time
 
 # Ensure we can import modules from current directory
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -10,6 +11,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from engine.dictionary import DictionaryLoader
 from engine.mutations import MutationEngine
 from engine.filters import FilterEngine
+from engine.generator import PatternGenerator
 from utils.progress import ProgressBar
 
 try:
@@ -17,122 +19,234 @@ try:
 except ImportError:
     yaml = None
 
+# --- ANSI Colors for Kali Style ---
+class Colors:
+    HEADER = '\033[95m'
+    BLUE = '\033[94m'
+    CYAN = '\033[96m'
+    GREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+
+# Safe ASCII Banner construction
+BANNER_ASCII = r"""
+  _                _     
+ (_) ___ _ __ __ _| | _____   _  ___  _   _ 
+ | |/ __| '__/ _` | |/ / \ \ / / _ \| | | |
+ | | (__| | | (_| |   <| |\ V / (_) | |_| |
+ |_|\___|_|  \__,_|_|\_\_| \_/ \___/ \__,_|
+                                           """ 
+BANNER = Colors.FAIL + BANNER_ASCII + Colors.ENDC + "\n" + Colors.CYAN + "    >> Intelligent Wordlist Generator <<" + Colors.ENDC + "\n"
+
 def load_config(config_path):
     if not config_path or not os.path.exists(config_path):
         return {}
     if not yaml:
-        print("Warning: PyYAML not installed. Config file ignored.", file=sys.stderr)
         return {}
     try:
         with open(config_path, 'r') as f:
             return yaml.safe_load(f) or {}
     except Exception as e:
-        print(f"Error loading config: {e}", file=sys.stderr)
+        print(f"{Colors.WARNING}Error loading config: {e}{Colors.ENDC}", file=sys.stderr)
         return {}
 
+def print_summary(source_desc, run_config):
+    """Prints a configuration summary."""
+    print(f"{Colors.HEADER}[+] Configuration Summary:{Colors.ENDC}", file=sys.stderr)
+    print(f"    {Colors.BOLD}Source:{Colors.ENDC}      {source_desc}", file=sys.stderr)
+    
+    if run_config.get('pattern'):
+         print(f"    {Colors.BOLD}Pattern:{Colors.ENDC}     {Colors.CYAN}{run_config['pattern']}{Colors.ENDC}", file=sys.stderr)
+    
+    mutations = []
+    if run_config.get('lower'): mutations.append("Lowercase")
+    if run_config.get('upper'): mutations.append("Uppercase")
+    if run_config.get('capitalize'): mutations.append("Capitalize")
+    if run_config.get('inverse'): mutations.append("Inverse")
+    if run_config.get('numbers'): mutations.append("Smart Numbers")
+    if run_config.get('symbols'): mutations.append("Smart Symbols")
+    if run_config.get('leet'): mutations.append("Leetspeak")
+    
+    mut_str = ", ".join(mutations) if mutations else "None"
+    print(f"    {Colors.BOLD}Mutations:{Colors.ENDC}   {Colors.GREEN}{mut_str}{Colors.ENDC}", file=sys.stderr)
+    
+    prefixes = run_config.get('prefix', []) or []
+    suffixes = run_config.get('suffix', []) or []
+    if prefixes:
+        print(f"    {Colors.BOLD}Prefixes:{Colors.ENDC}    {', '.join(prefixes)}", file=sys.stderr)
+    if suffixes:
+        print(f"    {Colors.BOLD}Suffixes:{Colors.ENDC}    {', '.join(suffixes)}", file=sys.stderr)
+        
+    limits = []
+    min_len = run_config.get('min_length', 0)
+    max_len = run_config.get('max_length', 999)
+    limit_count = run_config.get('limit', 0)
+    
+    if min_len > 0: limits.append(f"MinLen: {min_len}")
+    if max_len < 999: limits.append(f"MaxLen: {max_len}")
+    if limit_count > 0: limits.append(f"CountLimit: {limit_count}")
+    
+    # Policies
+    if run_config.get('require_numbers'): limits.append("Must have Number")
+    if run_config.get('require_symbols'): limits.append("Must have Symbol")
+    if run_config.get('require_upper'): limits.append("Must have Upper")
+
+    limit_str = ", ".join(limits) if limits else "No Limits"
+    print(f"    {Colors.BOLD}Filters:{Colors.ENDC}     {Colors.WARNING}{limit_str}{Colors.ENDC}", file=sys.stderr)
+    print(f"{Colors.BLUE}{'-'*60}{Colors.ENDC}", file=sys.stderr)
+
 def main():
+    if len(sys.argv) == 1:
+        print(BANNER, file=sys.stderr)
+        print(f"{Colors.BOLD}Usage:{Colors.ENDC} icrackyou -d <file> [options]", file=sys.stderr)
+        print(f"Try {Colors.CYAN}--help{Colors.ENDC} for details.", file=sys.stderr)
+        sys.exit(0)
+
+    # Use single dash prefix logic if possible, or just add them as aliases.
+    # argparse allows adding "-min" directly.
     parser = argparse.ArgumentParser(
         description="icrackyou - Intelligent Wordlist Generator",
         formatter_class=argparse.RawTextHelpFormatter,
-        epilog="""Example:
-  icrackyou --dict rockyou.txt --capitalize --numbers --suffix 2024 --limit 10000"""
+        epilog=f"""{Colors.BOLD}Examples:{Colors.ENDC}
+  icrackyou -d rockyou.txt -n -max 10
+  icrackyou -p admin%%%% -s"""
     )
 
     # Input/Output
-    parser.add_argument("--dict", "-d", nargs='+', help="Path to dictionary file(s). Use '-' for stdin.")
-    parser.add_argument("--output", "-o", help="Output file path. Defaults to stdout.")
-    parser.add_argument("--config", "-c", help="Path to YAML config file.")
-
-    # Mutations
-    mut_group = parser.add_argument_group("Mutations")
-    mut_group.add_argument("--lower", action="store_true", help="Convert to lowercase")
-    mut_group.add_argument("--upper", action="store_true", help="Convert to uppercase")
-    mut_group.add_argument("--capitalize", action="store_true", help="Capitalize first letter")
-    mut_group.add_argument("--inverse", action="store_true", help="Inverse case (pASSWORD)")
-    mut_group.add_argument("--numbers", action="store_true", help="Append smart numbers")
-    mut_group.add_argument("--symbols", action="store_true", help="Append smart symbols")
-    mut_group.add_argument("--leet", action="store_true", help="Apply leetspeak mutations")
+    # Supporting both -d and --dict, -p and --pattern
+    parser.add_argument("-d", "--dict", nargs='+', help="Dictionary file(s) or '-' for stdin")
+    parser.add_argument("-o", "--output", help="Output file")
+    parser.add_argument("-c", "--config", help="Config file")
+    parser.add_argument("-q", "--quiet", action="store_true", help="Quiet mode")
     
-    # Custom Prefix/Suffix
-    ps_group = parser.add_argument_group("Prefix & Suffix")
-    ps_group.add_argument("--prefix", nargs='+', default=[], help="Add specific prefix(es)")
-    ps_group.add_argument("--suffix", nargs='+', default=[], help="Add specific suffix(es)")
+    # Pattern (Crunch-like)
+    parser.add_argument("-p", "--pattern", help="Generate from pattern (@,%%,^)")
 
-    # Filters
+    # Mutations (Short and Long)
+    mut_group = parser.add_argument_group("Mutations")
+    mut_group.add_argument("-l", "--lower", action="store_true", help="Lowercase")
+    mut_group.add_argument("-u", "--upper", action="store_true", help="Uppercase")
+    mut_group.add_argument("--capital", dest="capitalize", action="store_true", help="Capitalize")
+    mut_group.add_argument("--inverse", action="store_true", help="Inverse case")
+    mut_group.add_argument("-n", "--numbers", action="store_true", help="Smart Numbers")
+    mut_group.add_argument("-s", "--symbols", action="store_true", help="Smart Symbols")
+    mut_group.add_argument("--leet", action="store_true", help="Leetspeak")
+    
+    # Prefix/Suffix
+    ps_group = parser.add_argument_group("Prefix & Suffix")
+    ps_group.add_argument("--prefix", nargs='+', default=[], help="Add prefixes")
+    ps_group.add_argument("--suffix", nargs='+', default=[], help="Add suffixes")
+
+    # Filters (Single dash support requested: -min, -max)
     filt_group = parser.add_argument_group("Filters")
-    filt_group.add_argument("--min-length", type=int, default=0, help="Minimum length")
-    filt_group.add_argument("--max-length", type=int, default=999, help="Maximum length")
-    filt_group.add_argument("--limit", type=int, default=0, help="Max words to generate (0 = unlimited)")
+    filt_group.add_argument("-min", "--min-length", dest="min_length", type=int, default=0, help="Min length")
+    filt_group.add_argument("-max", "--max-length", dest="max_length", type=int, default=999, help="Max length")
+    filt_group.add_argument("--limit", type=int, default=0, help="Hard limit")
+    
+    # Policies
+    pol_group = parser.add_argument_group("Policies")
+    pol_group.add_argument("--require-numbers", action="store_true", help="Must have number")
+    pol_group.add_argument("--require-symbols", action="store_true", help="Must have symbol")
+    pol_group.add_argument("--require-upper", action="store_true", help="Must have upper")
 
     args = parser.parse_args()
 
     # Handle interrupt
     def signal_handler(sig, frame):
-        sys.stderr.write("\nInterrupted by user.\n")
+        sys.stderr.write(f"\n{Colors.FAIL}[!] Interrupted.{Colors.ENDC}\n")
         sys.exit(0)
     signal.signal(signal.SIGINT, signal_handler)
 
-    # Load config
+    if not args.quiet:
+        print(BANNER, file=sys.stderr)
+
     config = load_config(args.config)
-    
-    # CLI args override config
-    # We construct a consolidated config dictionary
     run_config = config.copy()
     
-    # Update boolean flags if set in CLI (CLI takes precedence if True)
-    for flag in ['lower', 'upper', 'capitalize', 'inverse', 'numbers', 'symbols', 'leet']:
-        if getattr(args, flag):
-            run_config[flag] = True
+    # Sync Flags
+    if args.lower: run_config['lower'] = True
+    if args.upper: run_config['upper'] = True
+    if args.capitalize: run_config['capitalize'] = True
+    if args.inverse: run_config['inverse'] = True
+    if args.numbers: run_config['numbers'] = True
+    if args.symbols: run_config['symbols'] = True
+    if args.leet: run_config['leet'] = True
     
-    # Extend lists
+    # Sync Policies
+    if args.require_numbers: run_config['require_numbers'] = True
+    if args.require_symbols: run_config['require_symbols'] = True
+    if args.require_upper: run_config['require_upper'] = True
+
+    # Sync Others
     if 'prefix' not in run_config: run_config['prefix'] = []
     if 'suffix' not in run_config: run_config['suffix'] = []
-    
     run_config['prefix'].extend(args.prefix)
     run_config['suffix'].extend(args.suffix)
-    
-    # Update filters
     if args.min_length != 0: run_config['min_length'] = args.min_length
     if args.max_length != 999: run_config['max_length'] = args.max_length
     if args.limit != 0: run_config['limit'] = args.limit
+    
+    if args.pattern:
+        run_config['pattern'] = args.pattern
 
-    # Setup Components
-    # If no dict specified, use internal default unless explicitly empty? 
-    # Logic: if args.dict is provided, use it. If not, check config? 
-    # If nothing, use internal.
-    loader = DictionaryLoader(args.dict, use_internal=(args.dict is None))
+    # DECIDE MODE: Dictionary or Pattern?
+    # If pattern is present, we use PatternGenerator as the source.
+    # We can still apply mutations (like appending suffix) to the generated patterns!
+    
+    if args.pattern:
+        source_desc = f"Pattern: {args.pattern}"
+        generator = PatternGenerator(args.pattern).generate()
+    else:
+        # Default Dictionary Mode
+        source_desc = "Internal Dictionary"
+        use_internal = (args.dict is None)
+        if args.dict:
+            if args.dict == ['-']:
+                source_desc = "Stdin"
+            else:
+                source_desc = f"Files: {len(args.dict)}"
+        generator = DictionaryLoader(args.dict, use_internal=use_internal).load_words()
+
+    if not args.quiet:
+        print_summary(source_desc, run_config)
+        time.sleep(1)
+        
+    # Pipeline: Generator -> Mutator -> Filter
+    # Even patterns can be mutated (e.g. pattern "admin" + suffix "123")
+    
     mutator = MutationEngine(run_config)
     filter_engine = FilterEngine(run_config)
+
+    mutated_words = mutator.process(generator)
+    final_words = filter_engine.filter(mutated_words)
     
-    # Output stream
+    # Output loop
+    
     out_file = sys.stdout
     if args.output:
         try:
             out_file = open(args.output, 'w', encoding='utf-8')
-        except Exception as e:
-            sys.stderr.write(f"Error opening output file: {e}\n")
+            if not args.quiet:
+                print(f"{Colors.GREEN}[*] Output: {args.output}{Colors.ENDC}", file=sys.stderr)
+        except Exception:
             sys.exit(1)
 
-    # Pipeline Execution
-    # Loader -> Mutator -> Filter -> Output
-    
-    raw_words = loader.load_words()
-    mutated_words = mutator.process(raw_words)
-    final_words = filter_engine.filter(mutated_words)
-    
-    progress = ProgressBar(desc="Generating")
-    
+    progress = ProgressBar(desc=f"{Colors.BLUE}Gen{Colors.ENDC}")
     try:
-        for word in final_words:
-            out_file.write(word + '\n')
-            progress.update()
+         for word in final_words:
+             out_file.write(word + '\n')
+             progress.update()
     except BrokenPipeError:
-        # Handle pipe closed (e.g. | head)
         sys.stderr.close()
     finally:
         progress.close()
         if args.output and out_file is not sys.stdout:
             out_file.close()
+        if not args.quiet:
+             print(f"{Colors.GREEN}[+] Done.{Colors.ENDC}", file=sys.stderr)
 
 if __name__ == "__main__":
     main()
