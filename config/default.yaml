@@ -1,0 +1,19 @@
+# icrackyou Default Configuration
+# You can override these with CLI flags
+
+mutations:
+  lower: false
+  upper: false
+  capitalize: false
+  numbers: false
+  symbols: false
+  leet: false
+  inverse: false
+
+filters:
+  min_length: 6
+  max_length: 20
+  limit: 0  # 0 means no limit
+
+prefixes: []
+suffixes: []
