@@ -15,7 +15,7 @@
 `icrackyou` is a standalone Python 3 tool. No heavy dependencies required.
 
 ```bash
-git clone https://github.com/yourusername/icrackyou.git
+git clone https://github.com/shadowshan125/icrackyou
 cd icrackyou
 chmod +x icrackyou.py
 ```
