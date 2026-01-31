@@ -9,11 +9,20 @@ mutations:
   symbols: false
   leet: false
   inverse: false
+  # Extended
+  reverse: false
+  repeat: false
+  sandwich: false
 
 filters:
   min_length: 6
   max_length: 20
   limit: 0  # 0 means no limit
+  # Policies
+  require_numbers: false
+  require_symbols: false
+  require_upper: false
+  require_lower: false
 
 prefixes: []
 suffixes: []

@@ -18,6 +18,7 @@ class FilterEngine:
         self.require_numbers = config.get('require_numbers', False)
         self.require_symbols = config.get('require_symbols', False)
         self.require_upper = config.get('require_upper', False)
+        self.require_lower = config.get('require_lower', False)
         
         self.count = 0
         self.seen = set()
@@ -30,8 +31,8 @@ class FilterEngine:
         # Pre-compile regexes for performance
         re_num = re.compile(r'\d') if self.require_numbers else None
         re_sym = re.compile(r'[!@#$%^&*(),.?":{}|<>]') if self.require_symbols else None
-        # Upper check can stick to string method or regex, regex usually fine here.
         re_upper = re.compile(r'[A-Z]') if self.require_upper else None
+        re_lower = re.compile(r'[a-z]') if self.require_lower else None
 
         for word in word_generator:
             if self.limit > 0 and self.count >= self.limit:
@@ -49,6 +50,8 @@ class FilterEngine:
             if re_sym and not re_sym.search(word):
                 continue
             if re_upper and not re_upper.search(word):
+                continue
+            if re_lower and not re_lower.search(word):
                 continue
 
             if word in self.seen:

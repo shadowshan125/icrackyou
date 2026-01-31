@@ -68,7 +68,12 @@ class MutationEngine:
                     leet_forms.add(leet_word)
             base_forms.update(leet_forms)
 
-        # 3. Prefixes and Suffixes
+        # 3. Extended Mutations
+        # Reverse
+        if self.config.get('reverse'):
+            base_forms.update([f[::-1] for f in list(base_forms)])
+        
+        # 4. Prefixes and Suffixes
         # These are multiplicative.
         prefixes = self.config.get('prefix', []) or []
         suffixes = self.config.get('suffix', []) or []
@@ -93,16 +98,28 @@ class MutationEngine:
         # Order: Prefix + [Base] + Suffix
         
         for form in base_forms:
-            # Yield base form itself (if no mandatory prefix/suffix enforcement logic)
+            # Yield base form
             yield form
+            
+            # Repeat (e.g. adminadmin)
+            if self.config.get('repeat'):
+                yield form * 2
             
             # Form + Suffix
             for s in suffixes:
                 yield f"{form}{s}"
+                
+                # Sandwich (Suffix only) - e.g. 123admin123
+                if self.config.get('sandwich'):
+                    yield f"{s}{form}{s}"
             
             # Prefix + Form
             for p in prefixes:
                 yield f"{p}{form}"
+                
+                # Sandwich (Prefix only) - e.g. @admin@
+                if self.config.get('sandwich'):
+                    yield f"{p}{form}{p}"
                 
                 # Prefix + Form + Suffix
                 for s in suffixes:

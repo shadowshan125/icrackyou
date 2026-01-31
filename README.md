@@ -42,12 +42,27 @@ Generate mutations from the internal dictionary:
     -o targeted_list.txt
 ```
 
-### Pattern Generation (Crunch-Style)
-Generate words based on a mask (ignore dictionary):
+### Strict Mode (Default)
+When you use mutation flags like `-n` (numbers) or `-u` (uppercase), `icrackyou` **automatically strict-filters** the output.
+*   `icrackyou -n` -> Generates words with numbers relative to input, and **filters out** any words that DO NOT have numbers.
+*   `icrackyou -u` -> Generates uppercase variants and **filters out** non-uppercase results.
+
+### Extended Mutations
+Generate advanced password styles (Reverse, Repeat, Sandwich):
 ```bash
-./icrackyou.py -p "admin%%%%" -o pins.txt
-# Generates admin0000 to admin9999
+./icrackyou.py -d rockyou.txt --reverse --sandwich -n -o complex_list.txt
+# Generates: nimda, 123admin123, !admin!
 ```
+
+### Smart Numeric Mode
+If you run `icrackyou -n` **without a dictionary**, the tool switches to a Numeric Generator.
+```bash
+./icrackyou.py -n -o pins.txt
+# Generates 0000-9999, years, and common pin codes.
+# (Output is strictly numbers)
+```
+
+### Pattern Generation (Crunch-Style)
 
 ### CLI Options
 
@@ -57,17 +72,20 @@ Generate words based on a mask (ignore dictionary):
 | `-p`, `--pattern` | Crunch-style pattern (@, %, ^) |
 | `-o`, `--output` | Output file path (default: stdout) |
 | `-c`, `--config` | Path to YAML config file |
-| `-l`, `--lower` | Convert to lowercase |
-| `-u`, `--upper` | Convert to uppercase |
+| `-l`, `--lower` | Convert to lower & **Filter for Lowercase** |
+| `-u`, `--upper` | Convert to upper & **Filter for Uppercase** |
 | `--capital` | Capitalize first letter |
-| `-n`, `--numbers` | Append smart number sequences (years, 123, etc.) |
-| `-s`, `--symbols` | Append common symbol suffixes |
+| `-n`, `--numbers` | Append smart numbers & **Filter for Numbers** |
+| `-s`, `--symbols` | Append smart symbols & **Filter for Symbols** |
 | `--leet` | Apply leetspeak substitutions |
+| `--reverse` | Reverse the word (admin -> nimda) |
+| `--repeat` | Repeat the word (admin -> adminadmin) |
+| `--sandwich` | Sandwich mutation (prefix+word+suffix mirroring) |
 | `-min`, `--min-length` | Minimum word length |
 | `-max`, `--max-length` | Maximum word length |
 | `--limit` | Hard limit on generated words |
-| `--require-numbers` | Content Policy: Output MUST contain a number |
-| `--require-symbols` | Content Policy: Output MUST contain a symbol |
+| `--require-numbers` | (Explicit) Content Policy: Output MUST contain a number |
+| `--require-upper` | (Explicit) Content Policy: Output MUST contain Uppercase |
 
 ## ⚙️ Configuration
 

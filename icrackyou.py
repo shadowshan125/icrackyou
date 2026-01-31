@@ -69,6 +69,9 @@ def print_summary(source_desc, run_config):
     if run_config.get('numbers'): mutations.append("Smart Numbers")
     if run_config.get('symbols'): mutations.append("Smart Symbols")
     if run_config.get('leet'): mutations.append("Leetspeak")
+    if run_config.get('reverse'): mutations.append("Reverse")
+    if run_config.get('repeat'): mutations.append("Repeat")
+    if run_config.get('sandwich'): mutations.append("Sandwich")
     
     mut_str = ", ".join(mutations) if mutations else "None"
     print(f"    {Colors.BOLD}Mutations:{Colors.ENDC}   {Colors.GREEN}{mut_str}{Colors.ENDC}", file=sys.stderr)
@@ -126,14 +129,18 @@ def main():
     parser.add_argument("-p", "--pattern", help="Generate from pattern (@,%%,^)")
 
     # Mutations (Short and Long)
-    mut_group = parser.add_argument_group("Mutations")
-    mut_group.add_argument("-l", "--lower", action="store_true", help="Lowercase")
-    mut_group.add_argument("-u", "--upper", action="store_true", help="Uppercase")
-    mut_group.add_argument("--capital", dest="capitalize", action="store_true", help="Capitalize")
+    mut_group = parser.add_argument_group("Mutations & Enforcements")
+    mut_group.add_argument("-l", "--lower", action="store_true", help="Convert to lowercase and REQUIRE lowercase in output")
+    mut_group.add_argument("-u", "--upper", action="store_true", help="Convert to uppercase and REQUIRE uppercase in output")
+    mut_group.add_argument("--capital", dest="capitalize", action="store_true", help="Capitalize first letter")
     mut_group.add_argument("--inverse", action="store_true", help="Inverse case")
-    mut_group.add_argument("-n", "--numbers", action="store_true", help="Smart Numbers")
-    mut_group.add_argument("-s", "--symbols", action="store_true", help="Smart Symbols")
-    mut_group.add_argument("--leet", action="store_true", help="Leetspeak")
+    mut_group.add_argument("-n", "--numbers", action="store_true", help="Append smart numbers and REQUIRE number in output")
+    mut_group.add_argument("-s", "--symbols", action="store_true", help="Append smart symbols and REQUIRE symbol in output")
+    mut_group.add_argument("--leet", action="store_true", help="Apply leetspeak mutations")
+    # Extended
+    mut_group.add_argument("--reverse", action="store_true", help="Add reversed words (admin -> nimda)")
+    mut_group.add_argument("--repeat", action="store_true", help="Add repeated words (admin -> adminadmin)")
+    mut_group.add_argument("--sandwich", action="store_true", help="Add sandwich mutations (123admin123)")
     
     # Prefix/Suffix
     ps_group = parser.add_argument_group("Prefix & Suffix")
@@ -148,9 +155,10 @@ def main():
     
     # Policies
     pol_group = parser.add_argument_group("Policies")
-    pol_group.add_argument("--require-numbers", action="store_true", help="Must have number")
-    pol_group.add_argument("--require-symbols", action="store_true", help="Must have symbol")
-    pol_group.add_argument("--require-upper", action="store_true", help="Must have upper")
+    pol_group.add_argument("--require-numbers", action="store_true", help="Output MUST contain a number")
+    pol_group.add_argument("--require-symbols", action="store_true", help="Output MUST contain a symbol")
+    pol_group.add_argument("--require-upper", action="store_true", help="Output MUST contain an uppercase letter")
+    pol_group.add_argument("--require-lower", action="store_true", help="Output MUST contain a lowercase letter")
 
     args = parser.parse_args()
 
@@ -167,18 +175,20 @@ def main():
     run_config = config.copy()
     
     # Sync Flags
-    if args.lower: run_config['lower'] = True
-    if args.upper: run_config['upper'] = True
-    if args.capitalize: run_config['capitalize'] = True
-    if args.inverse: run_config['inverse'] = True
-    if args.numbers: run_config['numbers'] = True
-    if args.symbols: run_config['symbols'] = True
-    if args.leet: run_config['leet'] = True
+    for flag in ['lower', 'upper', 'capitalize', 'inverse', 'numbers', 'symbols', 'leet', 'reverse', 'repeat', 'sandwich']:
+        if getattr(args, flag):
+            run_config[flag] = True
+            
+            # STRICT MODE: If user asks for X, enforce X in output.
+            if flag == 'numbers': run_config['require_numbers'] = True
+            if flag == 'symbols': run_config['require_symbols'] = True
+            if flag == 'upper': run_config['require_upper'] = True
+            if flag == 'lower': run_config['require_lower'] = True
     
-    # Sync Policies
-    if args.require_numbers: run_config['require_numbers'] = True
-    if args.require_symbols: run_config['require_symbols'] = True
-    if args.require_upper: run_config['require_upper'] = True
+    # Update Policies (Explicit flags still work)
+    for flag in ['require_numbers', 'require_symbols', 'require_upper', 'require_lower']: # Added require_lower here
+        if getattr(args, flag):
+            run_config[flag] = True
 
     # Sync Others
     if 'prefix' not in run_config: run_config['prefix'] = []
@@ -203,12 +213,36 @@ def main():
         # Default Dictionary Mode
         source_desc = "Internal Dictionary"
         use_internal = (args.dict is None)
+        
+        # SMART NUMERIC MODE check
+        # If no dict provided, and user specified -n (numbers), and NOT characters (lower/upper)
+        # Then switch strict "Numbers Only" generator.
+        is_numeric_only_request = (
+            args.dict is None and 
+            args.numbers and 
+            not args.lower and 
+            not args.upper and 
+            not args.capitalize
+        )
+        
+        loader = DictionaryLoader(args.dict, use_internal=use_internal)
+        
+        if is_numeric_only_request:
+            source_desc = "Smart Numeric Generator"
+            loader.set_numeric_mode(True)
+            # Pass constraints to allow brute force decision
+            loader.set_config(min_len=args.min_length, max_len=args.max_length)
+            
+            if args.min_length > 0:
+                source_desc = f"Numeric Brute Force ({args.min_length}-{args.max_length})"
+
         if args.dict:
             if args.dict == ['-']:
                 source_desc = "Stdin"
             else:
                 source_desc = f"Files: {len(args.dict)}"
-        generator = DictionaryLoader(args.dict, use_internal=use_internal).load_words()
+                
+        generator = loader.load_words()
 
     if not args.quiet:
         print_summary(source_desc, run_config)
