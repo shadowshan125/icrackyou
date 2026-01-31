@@ -54,12 +54,23 @@ Generate advanced password styles (Reverse, Repeat, Sandwich):
 # Generates: nimda, 123admin123, !admin!
 ```
 
-### Smart Numeric Mode
-If you run `icrackyou -n` **without a dictionary**, the tool switches to a Numeric Generator.
+### Smart Numeric & Brute Force Mode
+If you run `icrackyou` **without a dictionary**, it detects which character set you want based on flags.
+
+**Numeric Mode:**
 ```bash
 ./icrackyou.py -n -o pins.txt
 # Generates 0000-9999, years, and common pin codes.
-# (Output is strictly numbers)
+```
+
+**Full Brute Force Mode:**
+Provide specific characters (`-l`, `-u`, `-n`, `-s`) and length constraints.
+```bash
+# Generate all lowercase letters length 1-3 (a...zzz)
+./icrackyou.py -l -min 1 -max 3 -o letters.txt
+
+# Generate alphanumeric (lower+numbers) length 4
+./icrackyou.py -l -n -min 4 -max 4 -o codes.txt
 ```
 
 ### Pattern Generation (Crunch-Style)

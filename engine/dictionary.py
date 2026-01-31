@@ -55,22 +55,19 @@ class DictionaryLoader:
         for i in range(10000):
             yield f"{i:04d}"
 
-    def set_config(self, min_len=0, max_len=999):
+    def set_config(self, min_len=0, max_len=999, charset=None):
         self.min_len = min_len
         self.max_len = max_len
+        self.charset = charset
 
     def _generate_numeric_bruteforce(self):
-        """Generates all numbers within min_len and max_len."""
+        """Generates all combinations within min_len and max_len using configured charset."""
         import itertools
         
         # If no explicit limits were set (default 0 or huge max), fallback to smart list
         # We assume if user wants brute force, they likely set min_len > 0 or max_len < 20 (sanity check)
-        # Actually logic:
-        # If numeric mode is on, we check if min/max are "custom".
-        # If so -> Brute Force.
-        # If defaults -> Smart List.
         
-        start_len = max(1, self.min_len) if self.min_len > 0 else 4 # Default to 4-digit pins if unknown
+        start_len = max(1, self.min_len) if self.min_len > 0 else 4 
         end_len = min(self.max_len, 12) # Use 12 as safety cap for python iteration here if user goes wild
         
         # If user explicitly asked for max_len > 12, we warn? Or just do it?
@@ -78,7 +75,8 @@ class DictionaryLoader:
         # The user example is 8-10. So let's allow up to user max.
         end_len = self.max_len
         
-        digits = '0123456789'
+        digits = self.charset if self.charset else '0123456789'
+        
         for length in range(start_len, end_len + 1):
              for p in itertools.product(digits, repeat=length):
                  yield "".join(p)

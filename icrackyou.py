@@ -214,27 +214,59 @@ def main():
         source_desc = "Internal Dictionary"
         use_internal = (args.dict is None)
         
-        # SMART NUMERIC MODE check
-        # If no dict provided, and user specified -n (numbers), and NOT characters (lower/upper)
-        # Then switch strict "Numbers Only" generator.
-        is_numeric_only_request = (
-            args.dict is None and 
-            args.numbers and 
-            not args.lower and 
-            not args.upper and 
-            not args.capitalize
-        )
+        # SMART GENERATION MODE check
+        # If no dict provided, check which "Character Flags" are set.
+        # Flags: -n (numbers), -l (lower), -u (upper), -s (symbols)
+        # If ANY of these are set, we assume user wants to generate combinations of those chars.
+        
+        char_flags = []
+        if args.numbers: char_flags.append('numbers')
+        if args.lower: char_flags.append('lower')
+        if args.upper: char_flags.append('upper')
+        if args.symbols: char_flags.append('symbols')
+        
+        # Condition: No dict AND at least one char flag set
+        is_generation_request = (args.dict is None and len(char_flags) > 0)
         
         loader = DictionaryLoader(args.dict, use_internal=use_internal)
         
-        if is_numeric_only_request:
-            source_desc = "Smart Numeric Generator"
-            loader.set_numeric_mode(True)
-            # Pass constraints to allow brute force decision
-            loader.set_config(min_len=args.min_length, max_len=args.max_length)
+        if is_generation_request:
+            # Build Charset
+            import string
+            charset = ""
+            desc_parts = []
             
-            if args.min_length > 0:
-                source_desc = f"Numeric Brute Force ({args.min_length}-{args.max_length})"
+            if args.numbers: 
+                charset += string.digits
+                desc_parts.append("Numbers")
+            if args.lower: 
+                charset += string.ascii_lowercase
+                desc_parts.append("Lower")
+            if args.upper: 
+                charset += string.ascii_uppercase
+                desc_parts.append("Upper")
+            if args.symbols: 
+                charset += string.punctuation
+                desc_parts.append("Symbols")
+            
+            desc_str = "+".join(desc_parts)
+            
+            # Numeric Smart Mode Special Case:
+            # If ONLY numbers are requested AND min_len is default (0), we usually prefer the Smart List (Years/Pins).
+            # But if min_len > 0 is set, user wants brute force 000..999.
+            # If Letters/Symbols are involved, we ALWAYS brute force (no "smart list" for letters yet).
+            
+            is_pure_numeric_smart = (len(char_flags) == 1 and args.numbers and args.min_length == 0)
+            
+            if is_pure_numeric_smart:
+                 source_desc = "Smart Numeric Generator"
+                 loader.set_numeric_mode(True)
+                 loader.set_config(min_len=0, max_len=args.max_length)
+            else:
+                 # Generalized Brute Force
+                 source_desc = f"Brute Force Generator [{desc_str}]"
+                 loader.set_numeric_mode(True) # Reusing this flag to skip dict
+                 loader.set_config(min_len=args.min_length, max_len=args.max_length, charset=charset)
 
         if args.dict:
             if args.dict == ['-']:
