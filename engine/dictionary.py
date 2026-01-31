@@ -13,6 +13,9 @@ class DictionaryLoader:
         self.file_paths = file_paths or []
         self.use_internal = use_internal
         self.use_numeric = False # Default
+        self.min_len = 0
+        self.max_len = 999
+        self.charset = None
         
         # A small embedded dictionary for standalone quick usage
         self.internal_dict = [
