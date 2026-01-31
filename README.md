@@ -30,40 +30,44 @@ pip install pyyaml
 ### Basic Example
 Generate mutations from the internal dictionary:
 ```bash
-./icrackyou.py --upper --numbers --suffix 2024 --limit 1000
+./icrackyou.py -u -n --suffix 2024 --limit 1000
 ```
 
 ### Using RockYou or Custom Wordlist
 ```bash
-./icrackyou.py --dict /usr/share/wordlists/rockyou.txt \
-    --capitalize --numbers \
+./icrackyou.py -d /usr/share/wordlists/rockyou.txt \
+    --capital -n \
     --suffix 2025 \
-    --min-length 8 --max-length 12 \
-    --output targeted_list.txt
+    -min 8 -max 12 \
+    -o targeted_list.txt
 ```
 
-### Piping from CeWL
-Chaining tools for targeted profiling:
+### Pattern Generation (Crunch-Style)
+Generate words based on a mask (ignore dictionary):
 ```bash
-cewl https://example.com -d 2 -w - | ./icrackyou.py --dict - --leet --symbols --output final_list.txt
+./icrackyou.py -p "admin%%%%" -o pins.txt
+# Generates admin0000 to admin9999
 ```
 
 ### CLI Options
 
 | Flag | Description |
 |------|-------------|
-| `--dict` | Input dictionary file(s) or `-` for stdin |
-| `--output` | Output file path (default: stdout) |
-| `--config` | Path to YAML config file |
-| `--lower`, `--upper` | Enforce case transformations |
-| `--capitalize` | Capitalize first letter (Smart) |
-| `--inverse` | Inverse case (e.g., `pASSWORD`) |
-| `--numbers` | Append smart number sequences (years, 123, etc.) |
-| `--symbols` | Append common symbol suffixes |
-| `--leet` | Apply leetspeak substitutions (e.g., `e` -> `3`) |
-| `--prefix`, `--suffix` | Add custom prefixes/suffixes |
-| `--min-length` | Minimum word length to filter |
+| `-d`, `--dict` | Input dictionary file(s) or `-` for stdin |
+| `-p`, `--pattern` | Crunch-style pattern (@, %, ^) |
+| `-o`, `--output` | Output file path (default: stdout) |
+| `-c`, `--config` | Path to YAML config file |
+| `-l`, `--lower` | Convert to lowercase |
+| `-u`, `--upper` | Convert to uppercase |
+| `--capital` | Capitalize first letter |
+| `-n`, `--numbers` | Append smart number sequences (years, 123, etc.) |
+| `-s`, `--symbols` | Append common symbol suffixes |
+| `--leet` | Apply leetspeak substitutions |
+| `-min`, `--min-length` | Minimum word length |
+| `-max`, `--max-length` | Maximum word length |
 | `--limit` | Hard limit on generated words |
+| `--require-numbers` | Content Policy: Output MUST contain a number |
+| `--require-symbols` | Content Policy: Output MUST contain a symbol |
 
 ## ⚙️ Configuration
 
